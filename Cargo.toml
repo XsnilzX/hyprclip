@@ -1,3 +1,16 @@
-[workspace]
-members = ["shared", "daemon", "gui", "waybar"]
-resolver = "2"
+[package]
+name = "hyprclip"
+version = "0.1.0"
+edition = "2021"
+authors = ["Dein Name <email@example.com>"]
+description = "Clipboard Manager mit GUI und Waybar-Integration"
+license = "MIT"
+repository = "https://github.com/deinname/hyprclip"
+
+[dependencies]
+arboard = "3.2"                                    # Clipboard-Access
+eframe = "0.24"                                    # Für GUI mit egui/eframe
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1", features = ["full"] }
+clap = { version = "4.4", features = ["derive"] }  # CLI optional
