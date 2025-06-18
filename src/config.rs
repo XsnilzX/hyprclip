@@ -10,6 +10,8 @@ pub struct Config {
     pub theme: Theme,
     /// Pfad zur Datei, in der der Verlauf gespeichert wird
     pub storage_path: PathBuf,
+    /// Pfad zur Datei, in der Bilder gespeichert werden
+    pub image_storage_path: PathBuf,
 }
 
 /// Darstellungstypen für die GUI
@@ -27,6 +29,7 @@ impl Default for Config {
             history_limit: 50,
             theme: Theme::System,
             storage_path: Self::default_storage_path(),
+            image_storage_path: Self::default_image_storage_path(),
         }
     }
 }
@@ -46,6 +49,13 @@ impl Config {
             .unwrap_or_else(|| PathBuf::from("."))
             .join("hyprclip")
             .join("clipboard.json")
+    }
+
+    fn default_image_storage_path() -> PathBuf {
+        dirs::data_local_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("hyprclip")
+            .join("images")
     }
 
     /// Lädt die Konfiguration oder erstellt eine neue mit Default-Werten

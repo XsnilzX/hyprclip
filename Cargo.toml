@@ -13,6 +13,7 @@ chrono = "0.4"                                     # Time and Date Handling
 clap = { version = "4.4", features = ["derive"] }  # CLI optional
 dirs = "5.0"                                       # Directory Access
 eframe = "0.24"                                    # Für GUI mit egui/eframe
+image = "0.25.6"                                   # Für Bilder
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tokio = { version = "1", features = ["full"] }
