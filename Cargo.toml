@@ -2,15 +2,24 @@
 name = "hyprclip"
 version = "0.1.0"
 edition = "2021"
-authors = ["Dein Name <email@example.com>"]
+authors = ["Richard Taesler <officiall.xdragonyt@gmail.com>"]
 description = "Clipboard Manager mit GUI und Waybar-Integration"
 license = "MIT"
-repository = "https://github.com/deinname/hyprclip"
+repository = "https://github.com/XsnnilzX/hyprclip"
 
 [dependencies]
 arboard = "3.2"                                    # Clipboard-Access
+chrono = "0.4"                                     # Time and Date Handling
+clap = { version = "4.4", features = ["derive"] }  # CLI optional
+dirs = "5.0"                                       # Directory Access
 eframe = "0.24"                                    # Für GUI mit egui/eframe
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tokio = { version = "1", features = ["full"] }
-clap = { version = "4.4", features = ["derive"] }  # CLI optional
+toml = "0.8"
+
+
+[features]
+default = ["ui", "waybar"]
+ui = []
+waybar = []
