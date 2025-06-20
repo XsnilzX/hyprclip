@@ -49,6 +49,12 @@ impl App for HyprclipApp {
 
                     if resp.clicked() {
                         let mut history = self.shared_history.lock().unwrap();
+
+                        let entry = &history.entries[i];
+                        if let Err(e) = crate::clipboard::set_clipboard_item(&entry.item) {
+                            eprintln!("⚠️ Fehler beim Setzen der Zwischenablage: {}", e);
+                        }
+
                         if i != 0 {
                             let selected = history.entries.remove(i);
                             history.entries.insert(0, selected);

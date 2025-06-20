@@ -2,6 +2,7 @@ mod clipboard;
 mod config;
 mod history;
 mod ui;
+mod watcher;
 mod waybar;
 
 use clap::Parser;
@@ -105,7 +106,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let h = Arc::clone(&history);
                 let c = cfg.clone();
                 tokio::spawn(async move {
-                    clipboard::watch::watch_clipboard(h, c).await;
+                    watcher::watch::watch_clipboard(h, c).await;
                 });
             }
             None => {

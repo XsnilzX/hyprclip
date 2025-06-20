@@ -1,5 +1,4 @@
 use crate::history::History;
-use eframe::App;
 use std::{
     path::PathBuf,
     sync::{Arc, Mutex},

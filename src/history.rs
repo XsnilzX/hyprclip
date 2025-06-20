@@ -4,9 +4,16 @@ use std::io::{BufReader, Write};
 use std::path::PathBuf;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub enum ClipboardItem {
+    Text(String),
+    Image(PathBuf),
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Entry {
-    pub content: String,
+    pub content: String, // Vorschau (z. B. "🖼 Bild gespeichert...")
     pub timestamp: u64,
+    pub item: ClipboardItem, // NEU: Für das tatsächliche Clipboard-Setzen
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -23,25 +30,47 @@ impl History {
         }
     }
 
-    pub fn add(&mut self, content: String) {
+    pub fn add_text(&mut self, text: String) {
+        if self.entries.first().map(|e| &e.content) == Some(&text) {
+            return;
+        }
+
+        let entry = Entry {
+            content: text.clone(),
+            timestamp: chrono::Utc::now().timestamp() as u64,
+            item: ClipboardItem::Text(text),
+        };
+        self.entries.insert(0, entry);
+        self.cleanup();
+    }
+
+    pub fn add_image(&mut self, image_path: PathBuf) {
+        let content = format!("🖼️ Bild: {}", image_path.display());
+
         if self.entries.first().map(|e| &e.content) == Some(&content) {
-            return; // kein Duplikat direkt hintereinander
+            return;
         }
 
         let entry = Entry {
             content,
             timestamp: chrono::Utc::now().timestamp() as u64,
+            item: ClipboardItem::Image(image_path),
         };
         self.entries.insert(0, entry);
+        self.cleanup();
+    }
 
+    fn cleanup(&mut self) {
         if self.entries.len() > self.limit {
             self.entries.truncate(self.limit);
         }
     }
 
+    /*
     pub fn latest(&self) -> Option<&Entry> {
         self.entries.first()
     }
+    */
 
     pub fn save(&self, path: &PathBuf) -> std::io::Result<()> {
         fs::create_dir_all(path.parent().unwrap())?;

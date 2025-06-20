@@ -39,7 +39,7 @@ pub async fn watch_clipboard(history: Arc<Mutex<History>>, config: Config) {
                 last_text_change = now;
 
                 let mut hist = history.lock().unwrap();
-                hist.add(text);
+                hist.add_text(text);
                 if let Err(err) = hist.save(&config.storage_path) {
                     eprintln!("⚠️ Fehler beim Speichern (Text): {}", err);
                 }
@@ -60,7 +60,7 @@ pub async fn watch_clipboard(history: Arc<Mutex<History>>, config: Config) {
                     Ok(path) => {
                         let msg = format!("🖼️ Bild gespeichert unter {}", path.display());
                         let mut hist = history.lock().unwrap();
-                        hist.add(msg);
+                        hist.add_image(path.clone());
                         if let Err(err) = hist.save(&config.storage_path) {
                             eprintln!("⚠️ Fehler beim Speichern (Bild): {}", err);
                         }
