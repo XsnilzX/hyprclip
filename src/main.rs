@@ -7,7 +7,11 @@ mod waybar;
 use clap::Parser;
 use config::Config;
 use history::History;
-use std::sync::Arc;
+use std::{
+    fs::{File, OpenOptions},
+    path::Path,
+    sync::{Arc, Mutex},
+};
 
 /// Hyprclip – Clipboard Manager mit GUI und Waybar-Integration
 #[derive(Parser)]
@@ -27,7 +31,7 @@ struct Cli {
     #[arg(long)]
     gui: bool,
 
-    /// Starte den Hintergrunddienst zur Clipboard-Überwachung
+    /// Lösche den Verlauf
     #[arg(long)]
     clear: bool,
 
@@ -42,36 +46,43 @@ struct Cli {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    use std::sync::{Arc, Mutex};
-
     let cli = Cli::parse();
-    let cfg = config::Config::load_or_create();
+    let cfg = Config::load_or_create();
 
-    // 📋 Verlauf vorbereiten
-    let mut history = history::History::load(&cfg.storage_path, cfg.history_limit);
+    let history = Arc::new(Mutex::new(History::load(
+        &cfg.storage_path,
+        cfg.history_limit,
+    )));
+
+    // Wenn keine Flags gesetzt → automatisch GUI + Watch starten
+    let nothing_specified =
+        !cli.watch && !cli.gui && !cli.clear && !cli.export && cli.search.is_none() && !cli.waybar;
+    let launch_gui = cli.gui || nothing_specified;
+    let launch_watch = cli.watch || nothing_specified;
 
     // 🧹 Verlauf löschen
     if cli.clear {
-        history.clear();
-        history.save(&cfg.storage_path)?;
+        history.lock().unwrap().clear();
+        history.lock().unwrap().save(&cfg.storage_path)?;
         println!("✅ Verlauf gelöscht.");
         return Ok(());
     }
 
-    // 📤 Verlauf exportieren
+    // 📤 Exportieren
     if cli.export {
-        let json = history.export_json()?;
+        let json = history.lock().unwrap().export_json()?;
         println!("{json}");
         return Ok(());
     }
 
-    // 🔍 Verlauf durchsuchen
+    // 🔍 Suche
     if let Some(keyword) = cli.search {
-        let results = history.search(&keyword);
+        let guard = history.lock().unwrap();
+        let results = guard.search(&keyword);
         if results.is_empty() {
-            println!("🔍 Keine Treffer für „{keyword}“");
+            println!("🔍 Keine Treffer für „{}“", keyword);
         } else {
-            println!("🔍 Treffer für „{keyword}“:");
+            println!("🔍 Treffer für „{}“:", keyword);
             for entry in results {
                 println!("- {}", entry.content);
             }
@@ -85,19 +96,59 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    // ▶️ Watcher starten, falls gewünscht
-    if cli.watch {
-        let history = Arc::new(Mutex::new(history));
-        let history_clone = Arc::clone(&history);
-        let config_clone = cfg.clone();
+    // ▶️ Watcher starten
+    let mut _lock_file: Option<File> = None;
+    if launch_watch {
+        match check_watcher_lock() {
+            Some(lock) => {
+                _lock_file = Some(lock);
+                let h = Arc::clone(&history);
+                let c = cfg.clone();
+                tokio::spawn(async move {
+                    clipboard::watch::watch_clipboard(h, c).await;
+                });
+            }
+            None => {
+                eprintln!("⚠️ Watcher läuft bereits.");
+                // Wenn explizit nur --watch gesetzt → abbrechen
+                if cli.watch && !cli.gui {
+                    return Ok(());
+                }
+            }
+        }
+    }
 
-        tokio::spawn(async move {
-            clipboard::watch::watch_clipboard(history_clone, config_clone).await;
-        });
+    // 🖼️ GUI starten
+    if launch_gui {
+        ui::launch_with_history(Arc::clone(&history), cfg.storage_path.clone())?;
+    } else if cli.watch {
+        // Nur Watcher: laufend halten, bis Ctrl+C
+        println!("📋 Watcher läuft... (Beenden mit Ctrl+C)");
+        tokio::signal::ctrl_c().await?;
+        println!("👋 Beendet.");
+    }
 
-        // Optional: GUI dazu starten
-        ui::launch_with_history(Arc::clone(&history), cfg.storage_path.clone()).await?;
+    // Lock-Datei beim Beenden löschen
+    if _lock_file.is_some() {
+        std::fs::remove_file("/tmp/hyprclip.lock").ok();
     }
 
     Ok(())
+}
+
+/// Erstellt eine Lock-Datei, um Mehrfach-Start zu verhindern
+fn check_watcher_lock() -> Option<File> {
+    let lock_path = "/tmp/hyprclip.lock";
+    if Path::new(lock_path).exists() {
+        return None;
+    }
+
+    match OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(lock_path)
+    {
+        Ok(file) => Some(file),
+        Err(_) => None,
+    }
 }

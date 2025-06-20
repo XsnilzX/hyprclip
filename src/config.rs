@@ -8,7 +8,7 @@ pub struct Config {
     pub history_limit: usize,
     /// Farbmodus für die UI
     pub theme: Theme,
-    /// Pfad zur Datei, in der der Verlauf gespeichert wird
+    /// Pfad zur Datei, in der Text gespeichert wird
     pub storage_path: PathBuf,
     /// Pfad zur Datei, in der Bilder gespeichert werden
     pub image_storage_path: PathBuf,
@@ -26,7 +26,7 @@ pub enum Theme {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            history_limit: 50,
+            history_limit: 100,
             theme: Theme::System,
             storage_path: Self::default_storage_path(),
             image_storage_path: Self::default_image_storage_path(),
