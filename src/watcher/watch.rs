@@ -59,6 +59,7 @@ pub async fn watch_clipboard(history: Arc<Mutex<History>>, config: Config) {
                 match save_image_as_png(&image_data, &image_dir, hash) {
                     Ok(path) => {
                         let msg = format!("🖼️ Bild gespeichert unter {}", path.display());
+                        println!("{}", msg);
                         let mut hist = history.lock().unwrap();
                         hist.add_image(path.clone());
                         if let Err(err) = hist.save(&config.storage_path) {
