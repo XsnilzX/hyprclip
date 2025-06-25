@@ -15,9 +15,8 @@ Er bietet eine moderne GUI mit [egui](https://github.com/emilk/egui) und nahtlos
 ```bash
 git clone https://github.com/XsnilzX/hyprclip.git
 cd hyprclip
-cargo build --release
+make install
 ```
-Die fertige Binary findest du unter target/release/hyprclip.
 
 ## 📦 Abhängigkeiten
 - Linux mit Wayland (z.B. Hyprland)
@@ -33,11 +32,10 @@ Wenn du Hyprclip in Waybar integrieren willst, kannst du das JSON-Modul wie folg
 ```JSON
 "custom/hyprclip": {
   "format": "{}",
-  "exec": "~/.cargo/bin/hyprclip --waybar",
+  "exec": "/usr/bin/hyprclip --waybar",
   "interval": 1
 }
 ```
-(Dieses Beispiel geht davon aus, dass du die Binary global oder via cargo install --path . installiert hast.)
 
 ## 📜 Lizenz
 Dieses Projekt steht unter der [MIT-Lizenz](LICENSE).
