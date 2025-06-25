@@ -15,7 +15,7 @@ pub fn launch_with_history(
     eframe::run_native(
         "Hyprclip",
         options,
-        Box::new(move |_cc| Box::new(HyprclipApp::new(history, storage_path))),
+        Box::new(move |_cc| Ok(Box::new(HyprclipApp::new(history, storage_path)))),
     )
     .map_err(|e| format!("GUI konnte nicht gestartet werden: {e}").into())
 }

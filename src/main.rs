@@ -1,4 +1,5 @@
 mod clipboard;
+mod clipboard_state;
 mod config;
 mod history;
 mod ui;
@@ -9,8 +10,7 @@ use clap::Parser;
 use config::Config;
 use history::History;
 use std::{
-    fs::{File, OpenOptions},
-    path::Path,
+    fs::OpenOptions,
     sync::{Arc, Mutex},
 };
 
@@ -55,13 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         cfg.history_limit,
     )));
 
-    // Wenn keine Flags gesetzt → automatisch GUI + Watch starten
-    let nothing_specified =
-        !cli.watch && !cli.gui && !cli.clear && !cli.export && cli.search.is_none() && !cli.waybar;
-    let launch_gui = cli.gui || nothing_specified;
-    let launch_watch = cli.watch || nothing_specified;
-
-    // 🧹 Verlauf löschen
+    // 🔄 Aktionen mit sofortigem Rückgabewert
     if cli.clear {
         history.lock().unwrap().clear();
         history.lock().unwrap().save(&cfg.storage_path)?;
@@ -69,14 +63,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    // 📤 Exportieren
     if cli.export {
         let json = history.lock().unwrap().export_json()?;
         println!("{json}");
         return Ok(());
     }
 
-    // 🔍 Suche
     if let Some(keyword) = cli.search {
         let guard = history.lock().unwrap();
         let results = guard.search(&keyword);
@@ -91,65 +83,71 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    // 📊 Waybar-Modus
     if cli.waybar {
         waybar::run().await?;
         return Ok(());
     }
 
-    // ▶️ Watcher starten
-    let mut _lock_file: Option<File> = None;
-    if launch_watch {
-        match check_watcher_lock() {
-            Some(lock) => {
-                _lock_file = Some(lock);
-                let h = Arc::clone(&history);
-                let c = cfg.clone();
-                tokio::spawn(async move {
-                    watcher::watch::watch_clipboard(h, c).await;
-                });
-            }
-            None => {
-                eprintln!("⚠️ Watcher läuft bereits.");
-                // Wenn explizit nur --watch gesetzt → abbrechen
-                if cli.watch && !cli.gui {
-                    return Ok(());
-                }
-            }
-        }
+    if cli.watch {
+        run_watcher(history, cfg).await?;
+        return Ok(());
     }
 
-    // 🖼️ GUI starten
-    if launch_gui {
+    if cli.gui {
         ui::launch_with_history(Arc::clone(&history), cfg.storage_path.clone())?;
-    } else if cli.watch {
-        // Nur Watcher: laufend halten, bis Ctrl+C
-        println!("📋 Watcher läuft... (Beenden mit Ctrl+C)");
-        tokio::signal::ctrl_c().await?;
-        println!("👋 Beendet.");
+        return Ok(());
     }
 
-    // Lock-Datei beim Beenden löschen
-    if _lock_file.is_some() {
-        std::fs::remove_file("/tmp/hyprclip.lock").ok();
-    }
-
+    // ❓ Fallback wenn kein Flag gesetzt
+    eprintln!("❗ Kein Modus gewählt. Starte mit --gui, --watch oder --help");
     Ok(())
 }
 
-/// Erstellt eine Lock-Datei, um Mehrfach-Start zu verhindern
-fn check_watcher_lock() -> Option<File> {
-    let lock_path = "/tmp/hyprclip.lock";
-    if Path::new(lock_path).exists() {
-        return None;
-    }
+// 🔐 Watcher-Modus mit Lockfile + Ctrl+C-Abbruch
+async fn run_watcher(
+    history: Arc<Mutex<History>>,
+    cfg: Config,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use tokio::signal;
 
-    match OpenOptions::new()
+    let lock_path = "/tmp/hyprclip.lock";
+
+    // Lock-Datei exklusiv erstellen
+    let _lock = match OpenOptions::new()
         .write(true)
         .create_new(true)
         .open(lock_path)
     {
-        Ok(file) => Some(file),
-        Err(_) => None,
+        Ok(file) => file,
+        Err(_) => {
+            eprintln!("⚠️ Watcher läuft bereits (Lockfile vorhanden).");
+            return Ok(());
+        }
+    };
+
+    println!("📋 Watcher läuft... (Beenden mit Ctrl+C)");
+
+    let watch_task = tokio::spawn({
+        let h = Arc::clone(&history);
+        let c = cfg.clone();
+        async move {
+            watcher::watch::watch_clipboard(h, c).await;
+        }
+    });
+
+    // Auf Ctrl+C warten
+    signal::ctrl_c().await?;
+    println!("👋 Beenden...");
+
+    // Lock-Datei aktiv löschen
+    if let Err(e) = std::fs::remove_file(lock_path) {
+        eprintln!("❌ Konnte Lock-Datei nicht löschen: {e}");
+    } else {
+        println!("🧹 Lock-Datei gelöscht.");
     }
+
+    // Watcher-Task abbrechen (optional)
+    watch_task.abort();
+
+    Ok(())
 }

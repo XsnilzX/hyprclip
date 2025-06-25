@@ -29,7 +29,9 @@ pub async fn watch_clipboard(history: Arc<Mutex<History>>, config: Config) {
         let now = Instant::now();
 
         // TEXT
-        if let Some(text) = get_clipboard_text() {
+        if crate::clipboard_state::take_ignore_flag() {
+            // Diese Änderung stammt von uns selbst → ignoriere
+        } else if let Some(text) = get_clipboard_text() {
             let hash = hash_data(&text);
             if Some(hash) != last_text_hash
                 && now.duration_since(last_text_change) >= debounce_delay
@@ -47,7 +49,9 @@ pub async fn watch_clipboard(history: Arc<Mutex<History>>, config: Config) {
         }
 
         // BILD
-        if let Some(image_data) = get_clipboard_image() {
+        if crate::clipboard_state::take_ignore_flag() {
+            // Ignoriere eigenes Bild
+        } else if let Some(image_data) = get_clipboard_image() {
             let hash = hash_data(&image_data);
             if Some(hash) != last_image_hash
                 && now.duration_since(last_image_change) >= debounce_delay

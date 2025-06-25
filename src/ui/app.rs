@@ -1,7 +1,8 @@
 use crate::history::History;
 use eframe::{egui, App, Frame};
-use egui_extras::RetainedImage;
+use egui::TextureHandle;
 use std::{
+    collections::HashMap,
     path::PathBuf,
     sync::{Arc, Mutex},
 };
@@ -10,6 +11,7 @@ pub struct HyprclipApp {
     shared_history: Arc<Mutex<History>>,
     selected_index: usize,
     storage_path: PathBuf,
+    image_cache: HashMap<PathBuf, TextureHandle>,
 }
 
 impl HyprclipApp {
@@ -18,6 +20,7 @@ impl HyprclipApp {
             shared_history: history,
             selected_index: 0,
             storage_path,
+            image_cache: HashMap::new(),
         }
     }
 
@@ -46,21 +49,47 @@ impl App for HyprclipApp {
             } else {
                 for (i, entry) in entries.iter().enumerate() {
                     let sel = i == self.selected_index;
-                    let resp = ui.selectable_label(sel, &entry.content);
+                    let path = PathBuf::from(&entry.content);
 
-                    if resp.clicked() {
-                        let mut history = self.shared_history.lock().unwrap();
+                    let is_image = path.exists()
+                        && path.is_file()
+                        && (entry.content.ends_with(".png") || entry.content.ends_with(".jpg"));
 
-                        let entry = &history.entries[i];
-                        if let Err(e) = crate::clipboard::set_clipboard_item(&entry.item) {
-                            eprintln!("⚠️ Fehler beim Setzen der Zwischenablage: {}", e);
-                        }
+                    if is_image {
+                        let texture = self.image_cache.entry(path.clone()).or_insert_with(|| {
+                            let image_data = std::fs::read(&path).unwrap_or_default();
+                            let img = image::load_from_memory(&image_data).unwrap().to_rgba8();
+                            let size = [img.width() as usize, img.height() as usize];
 
-                        if i != 0 {
-                            let selected = history.entries.remove(i);
-                            history.entries.insert(0, selected);
-                            self.selected_index = 0;
-                            let _ = history.save(&self.storage_path);
+                            let color_image = egui::ColorImage::from_rgba_unmultiplied(
+                                size,
+                                img.as_flat_samples().as_slice(),
+                            );
+                            // ctx muss hier verfügbar sein!
+                            ctx.load_texture(
+                                path.to_string_lossy(),
+                                color_image,
+                                egui::TextureOptions::default(),
+                            )
+                        });
+
+                        ui.horizontal(|ui| {
+                            if ui
+                                .selectable_label(sel, path.file_name().unwrap().to_string_lossy())
+                                .clicked()
+                            {
+                                self.selected_index = i;
+                                let entry = &self.shared_history.lock().unwrap().entries[i];
+                                let _ = crate::clipboard::set_clipboard_item(&entry.item);
+                            }
+
+                            ui.add(egui::Image::new(&*texture));
+                        });
+                    } else {
+                        if ui.selectable_label(sel, &entry.content).clicked() {
+                            self.selected_index = i;
+                            let entry = &self.shared_history.lock().unwrap().entries[i];
+                            let _ = crate::clipboard::set_clipboard_item(&entry.item);
                         }
                     }
                 }
