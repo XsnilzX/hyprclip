@@ -1,5 +1,6 @@
 use crate::history::History;
 use eframe::{egui, App, Frame};
+use egui_extras::RetainedImage;
 use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
