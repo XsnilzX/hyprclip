@@ -1,3 +1,11 @@
+all : build
+
+build:
+	cargo build
+
+release:
+	cargo build --release
+
 install:
 	cargo build --release
 	sudo cp target/release/hyprclip /usr/bin/
@@ -6,3 +14,9 @@ install:
 	sudo systemctl daemon-reload
 	sudo systemctl enable hyperclip-watcher.service
 	sudo systemctl start hyperclip-watcher.service
+
+check:
+	cargo check
+
+clean:
+	cargo clean
