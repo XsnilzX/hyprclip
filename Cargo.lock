@@ -1742,6 +1742,7 @@ dependencies = [
  "egui",
  "egui_extras",
  "image",
+ "include-bytes-plus",
  "serde",
  "serde_json",
  "tokio",
@@ -1927,6 +1928,12 @@ checksum = "12f97096f508d54f8f8ab8957862eee2ccd628847b6217af1a335e1c44dee578"
 dependencies = [
  "arrayvec",
 ]
+
+[[package]]
+name = "include-bytes-plus"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "122887eb9acb1544bb0308837039dcfab0ec269f88b46fd2c9a84f3ab124d199"
 
 [[package]]
 name = "indexmap"

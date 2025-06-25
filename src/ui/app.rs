@@ -1,10 +1,11 @@
 use crate::history::History;
 use eframe::{egui, App, Frame};
-use egui::TextureHandle;
+use egui::{Key, TextureHandle};
 use std::{
     collections::HashMap,
     path::PathBuf,
     sync::{Arc, Mutex},
+    time::SystemTime,
 };
 
 pub struct HyprclipApp {
@@ -26,11 +27,36 @@ impl HyprclipApp {
 
     fn delete_selected(&mut self) {
         let mut history = self.shared_history.lock().unwrap();
-        if self.selected_index < history.entries.len() {
-            history.entries.remove(self.selected_index);
-            let _ = history.save(&self.storage_path);
+        if history.delete_entry(self.selected_index) {
+            if let Err(e) = history.save(&self.storage_path) {
+                eprintln!("Fehler beim Speichern: {}", e);
+            }
+
             if self.selected_index > 0 {
                 self.selected_index -= 1;
+            }
+        }
+    }
+
+    // Letzter Änderungszeitpunkt der Datei, um unnötiges Neuladen zu vermeiden
+    fn maybe_reload_history(&mut self) {
+        // Nur laden, wenn sich Datei geändert hat
+        static mut LAST_MODIFIED: Option<SystemTime> = None;
+
+        if let Ok(metadata) = std::fs::metadata(&self.storage_path) {
+            if let Ok(modified) = metadata.modified() {
+                unsafe {
+                    if LAST_MODIFIED.map_or(true, |t| t != modified) {
+                        // History neu laden
+                        let new_hist = History::load(
+                            &self.storage_path,
+                            self.shared_history.lock().unwrap().limit,
+                        );
+                        *self.shared_history.lock().unwrap() = new_hist;
+
+                        LAST_MODIFIED = Some(modified);
+                    }
+                }
             }
         }
     }
@@ -38,6 +64,7 @@ impl HyprclipApp {
 
 impl App for HyprclipApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut Frame) {
+        self.maybe_reload_history();
         let entries = { self.shared_history.lock().unwrap().entries.clone() };
 
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -94,17 +121,20 @@ impl App for HyprclipApp {
                     }
                 }
 
-                if ctx.input(|i| i.key_pressed(egui::Key::ArrowDown))
+                if ctx.input(|i| i.key_pressed(Key::ArrowDown))
                     && self.selected_index + 1 < entries.len()
                 {
                     self.selected_index += 1;
                 }
-                if ctx.input(|i| i.key_pressed(egui::Key::ArrowUp)) && self.selected_index > 0 {
+                if ctx.input(|i| i.key_pressed(Key::ArrowUp)) && self.selected_index > 0 {
                     self.selected_index -= 1;
                 }
-                if ctx.input(|i| i.key_pressed(egui::Key::Delete)) {
+                if ctx.input(|i| i.key_pressed(Key::Delete)) {
                     self.delete_selected();
                 }
+            }
+            if ctx.input(|i| i.key_pressed(Key::Escape)) {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             }
         });
 

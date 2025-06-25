@@ -66,6 +66,15 @@ impl History {
         }
     }
 
+    pub fn delete_entry(&mut self, index: usize) -> bool {
+        if index < self.entries.len() {
+            self.entries.remove(index);
+            true
+        } else {
+            false
+        }
+    }
+
     /*
     pub fn latest(&self) -> Option<&Entry> {
         self.entries.first()
