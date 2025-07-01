@@ -95,7 +95,25 @@ fn get_clipboard_text() -> Option<String> {
                 eprintln!("⚠️ Fehler beim Lesen des Textes aus der Zwischenablage: {e}");
                 return None;
             }
-            Some(buf).filter(|s| !s.trim().is_empty())
+
+            let trimmed = buf.trim();
+            if trimmed.is_empty() {
+                return None;
+            }
+
+            // 🔒 Variante 1: HTML mit <img> Tag ignorieren, um Endlosloop zu verhindern
+            if trimmed.starts_with("<meta") && trimmed.contains("<img") {
+                println!("⚠️ Ignoriere HTML-Zwischenablage mit <img> Tag, um Loop zu verhindern.");
+                return None;
+            }
+
+            // 🔒 Variante 2: "0,0" ignorieren
+            if trimmed == "0,0" {
+                println!("⚠️ Ignoriere Zwischenablage-Eintrag '0,0' (Koordinaten-Placeholder).");
+                return None;
+            }
+
+            Some(buf.to_string())
         }
         Err(e) => {
             eprintln!("⚠️ Fehler beim Zugriff auf die Zwischenablage (Text): {e}");

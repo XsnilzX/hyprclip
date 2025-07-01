@@ -45,7 +45,7 @@ impl History {
     }
 
     pub fn add_image(&mut self, image_path: PathBuf) {
-        let content = format!("🖼️ Bild: {}", image_path.display());
+        let content = format!("{}", image_path.display());
 
         if self.entries.first().map(|e| &e.content) == Some(&content) {
             return;

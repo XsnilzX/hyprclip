@@ -52,13 +52,56 @@ impl HyprclipApp {
                             &self.storage_path,
                             self.shared_history.lock().unwrap().limit,
                         );
+
+                        // Hole alle neuen Pfade **vor** dem Move
+                        let entries: Vec<_> = new_hist
+                            .entries
+                            .iter()
+                            .map(|e| PathBuf::from(&e.content))
+                            .collect();
+
+                        // Schreibe new_hist in shared_history (Move)
                         *self.shared_history.lock().unwrap() = new_hist;
+
+                        // Invalide cache für gelöschte/geänderte Pfade
+                        self.image_cache.retain(|k, _| entries.contains(k));
 
                         LAST_MODIFIED = Some(modified);
                     }
                 }
             }
         }
+    }
+
+    fn handle_key_inputs(&mut self, ctx: &egui::Context, entries_len: usize) {
+        if ctx.input(|i| i.key_pressed(Key::ArrowDown)) && self.selected_index + 1 < entries_len {
+            self.selected_index += 1;
+        }
+        if ctx.input(|i| i.key_pressed(Key::ArrowUp)) && self.selected_index > 0 {
+            self.selected_index -= 1;
+        }
+        if ctx.input(|i| i.key_pressed(Key::Delete)) {
+            self.delete_selected();
+        }
+        if ctx.input(|i| i.key_pressed(Key::Escape)) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
+    }
+
+    fn select_entry(&mut self, index: usize) {
+        self.selected_index = index;
+        let entry = &self.shared_history.lock().unwrap().entries[index];
+        let _ = crate::clipboard::set_clipboard_item(&entry.item);
+    }
+
+    fn fallback_texture(ctx: &egui::Context, path: &PathBuf) -> egui::TextureHandle {
+        // Erzeuge ein 1x1 transparentes Bild als Platzhalter
+        let fallback_image = egui::ColorImage::from_rgba_unmultiplied([1, 1], &[0, 0, 0, 0]);
+        ctx.load_texture(
+            format!("fallback:{}", path.to_string_lossy()),
+            fallback_image,
+            egui::TextureOptions::default(),
+        )
     }
 }
 
@@ -67,6 +110,9 @@ impl App for HyprclipApp {
         self.maybe_reload_history();
         let entries = { self.shared_history.lock().unwrap().entries.clone() };
 
+        // 🔑 Eingaben verarbeiten (Up, Down, Delete, Escape)
+        self.handle_key_inputs(ctx, entries.len());
+
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("📋 Clipboard-Verlauf");
             ui.separator();
@@ -74,67 +120,73 @@ impl App for HyprclipApp {
             if entries.is_empty() {
                 ui.label("Keine Einträge.");
             } else {
-                for (i, entry) in entries.iter().enumerate() {
-                    let sel = i == self.selected_index;
-                    let path = PathBuf::from(&entry.content);
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    for (i, entry) in entries.iter().enumerate() {
+                        let sel = i == self.selected_index;
+                        let path = PathBuf::from(&entry.content);
 
-                    let is_image = path.exists()
-                        && path.is_file()
-                        && (entry.content.ends_with(".png") || entry.content.ends_with(".jpg"));
+                        if path.exists()
+                            && path.is_file()
+                            && (entry.content.ends_with(".png") || entry.content.ends_with(".jpg"))
+                        {
+                            let texture: &TextureHandle = {
+                                let entry = self.image_cache.entry(path.clone());
+                                entry.or_insert_with(|| {
+                                    println!("🔄 Lade Bild: {:?}", path);
 
-                    if is_image {
-                        let texture = self.image_cache.entry(path.clone()).or_insert_with(|| {
-                            let image_data = std::fs::read(&path).unwrap_or_default();
-                            let img = image::load_from_memory(&image_data).unwrap().to_rgba8();
-                            let size = [img.width() as usize, img.height() as usize];
+                                    match std::fs::read(&path) {
+                                        Ok(image_data) if !image_data.is_empty() => {
+                                            match image::load_from_memory(&image_data) {
+                                                Ok(img) => {
+                                                    let img = img.to_rgba8();
+                                                    let size = [img.width() as _, img.height() as _];
+                                                    println!("✅ Bild erfolgreich geladen: {:?}, Größe: {:?}", path, size);
 
-                            let color_image = egui::ColorImage::from_rgba_unmultiplied(
-                                size,
-                                img.as_flat_samples().as_slice(),
-                            );
-                            // ctx muss hier verfügbar sein!
-                            ctx.load_texture(
-                                path.to_string_lossy(),
-                                color_image,
-                                egui::TextureOptions::default(),
-                            )
-                        });
+                                                    let color_image = egui::ColorImage::from_rgba_unmultiplied(
+                                                        size,
+                                                        img.as_flat_samples().as_slice(),
+                                                    );
+                                                    ctx.load_texture(
+                                                        path.to_string_lossy(),
+                                                        color_image,
+                                                        egui::TextureOptions::default(),
+                                                    )
+                                                }
+                                                Err(e) => {
+                                                    eprintln!("❌ Fehler beim Dekodieren: {:?}: {}", path, e);
+                                                    Self::fallback_texture(ctx, &path)
+                                                }
+                                            }
+                                        }
+                                        Ok(_) => {
+                                            eprintln!("❌ Bilddatei ist leer: {:?}", path);
+                                            Self::fallback_texture(ctx, &path)
+                                        }
+                                        Err(e) => {
+                                            eprintln!("❌ Fehler beim Lesen: {:?}: {}", path, e);
+                                            Self::fallback_texture(ctx, &path)
+                                        }
+                                    }
+                                })
+                            };
 
-                        ui.horizontal(|ui| {
-                            if ui
-                                .selectable_label(sel, path.file_name().unwrap().to_string_lossy())
-                                .clicked()
-                            {
-                                self.selected_index = i;
-                                let entry = &self.shared_history.lock().unwrap().entries[i];
-                                let _ = crate::clipboard::set_clipboard_item(&entry.item);
+                            // 👉 UI Rendering
+                            let response = ui.horizontal(|ui| {
+                                let response = ui.selectable_label(sel, path.file_name().unwrap().to_string_lossy());
+                                ui.add(egui::Image::new(texture));
+                                response
+                            }).inner;
+
+                            // ✅ Verwende den echten Response für scroll_to_me und clicked
+                            if sel {
+                                response.scroll_to_me(Some(egui::Align::Center));
                             }
-
-                            ui.add(egui::Image::new(&*texture));
-                        });
-                    } else {
-                        if ui.selectable_label(sel, &entry.content).clicked() {
-                            self.selected_index = i;
-                            let entry = &self.shared_history.lock().unwrap().entries[i];
-                            let _ = crate::clipboard::set_clipboard_item(&entry.item);
+                            if response.clicked() {
+                                self.select_entry(i);
+                            }
                         }
                     }
-                }
-
-                if ctx.input(|i| i.key_pressed(Key::ArrowDown))
-                    && self.selected_index + 1 < entries.len()
-                {
-                    self.selected_index += 1;
-                }
-                if ctx.input(|i| i.key_pressed(Key::ArrowUp)) && self.selected_index > 0 {
-                    self.selected_index -= 1;
-                }
-                if ctx.input(|i| i.key_pressed(Key::Delete)) {
-                    self.delete_selected();
-                }
-            }
-            if ctx.input(|i| i.key_pressed(Key::Escape)) {
-                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                });
             }
         });
 
