@@ -38,20 +38,26 @@ pub async fn watch_clipboard(history: Arc<Mutex<History>>, config: Config) {
         // ✅ 2. TEXT
         if let Some(text) = get_clipboard_text() {
             let hash = hash_data(&text);
+
+            let mut hist_guard = history.lock().unwrap();
+            let is_duplicate = hist_guard.entries.iter().any(|e| e.hash == Some(hash));
+            let limit = hist_guard.limit;
+
             if Some(hash) != last_text_hash
+                && !is_duplicate
                 && now.duration_since(last_text_change) >= debounce_delay
             {
                 println!("📝 Neuer Texteingang: {}", text);
                 last_text_hash = Some(hash);
                 last_text_change = now;
 
-                let mut hist = History::load(&config.storage_path, history.lock().unwrap().limit);
+                let mut hist = History::load(&config.storage_path, limit);
                 hist.add_text(text);
                 if let Err(err) = hist.save(&config.storage_path) {
                     eprintln!("⚠️ Fehler beim Speichern (Text): {}", err);
                 }
 
-                *history.lock().unwrap() = hist;
+                *hist_guard = hist;
             }
         }
 
