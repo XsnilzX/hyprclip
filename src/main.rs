@@ -3,6 +3,7 @@ mod clipboard_state;
 mod config;
 mod history;
 mod ui;
+mod util;
 mod watcher;
 mod waybar;
 

@@ -1,10 +1,9 @@
-use crate::{config::Config, history::History};
+use crate::util::hash_data;
+use crate::{clipboard_state, config::Config, history::History};
 use chrono::Local;
 use image::{ImageBuffer, Rgba};
 use std::{
-    collections::hash_map::DefaultHasher,
     fs,
-    hash::{Hash, Hasher},
     io::Read,
     path::PathBuf,
     sync::{Arc, Mutex},
@@ -26,12 +25,18 @@ pub async fn watch_clipboard(history: Arc<Mutex<History>>, config: Config) {
     fs::create_dir_all(&image_dir).expect("📁 Bildverzeichnis konnte nicht erstellt werden.");
 
     loop {
+        // ✅ 1. Ignore prüfen (timestamp-based)
+        if clipboard_state::should_ignore_recently(Duration::from_millis(500)) {
+            // Änderung stammt von uns selbst → ignorieren
+            println!("⚠️ Ignoriere Clipboard-Event wegen kürzlichem self-set.");
+            sleep(Duration::from_millis(200)).await;
+            continue;
+        }
+
         let now = Instant::now();
 
-        // TEXT
-        if crate::clipboard_state::take_ignore_flag() {
-            // Diese Änderung stammt von uns selbst → ignoriere
-        } else if let Some(text) = get_clipboard_text() {
+        // ✅ 2. TEXT
+        if let Some(text) = get_clipboard_text() {
             let hash = hash_data(&text);
             if Some(hash) != last_text_hash
                 && now.duration_since(last_text_change) >= debounce_delay
@@ -46,37 +51,66 @@ pub async fn watch_clipboard(history: Arc<Mutex<History>>, config: Config) {
                     eprintln!("⚠️ Fehler beim Speichern (Text): {}", err);
                 }
 
-                // shared_history ersetzen
                 *history.lock().unwrap() = hist;
             }
         }
 
-        // BILD
-        if crate::clipboard_state::take_ignore_flag() {
-            // Ignoriere eigenes Bild
-        } else if let Some(image_data) = get_clipboard_image() {
+        // ✅ 3. BILD
+        if let Some(image_data) = get_clipboard_image() {
             let hash = hash_data(&image_data);
-            if Some(hash) != last_image_hash
-                && now.duration_since(last_image_change) >= debounce_delay
+
+            // ✅ Skip hash prüfen und konsumieren
+            if let Some(skip_hash) = crate::clipboard_state::take_skip_image_hash() {
+                if skip_hash == hash {
+                    println!("⚠️ Skip Bild (skip_hash match: {:x})", hash);
+                    sleep(Duration::from_millis(200)).await;
+                    continue;
+                }
+            }
+
+            // ✅ Skip, wenn exakt gleicher Hash wie zuletzt erkannt
+            if Some(hash) == last_image_hash
+                || history
+                    .lock()
+                    .unwrap()
+                    .entries
+                    .iter()
+                    .any(|e| e.hash == Some(hash))
             {
+                println!("⚠️ Skip Bild (Hash {:x} bereits bekannt).", hash);
+                sleep(Duration::from_millis(200)).await;
+                continue;
+            }
+
+            if now.duration_since(last_image_change) >= debounce_delay {
                 println!("🖼️ Neues Bild erkannt (Hash: {:x})", hash);
                 last_image_hash = Some(hash);
                 last_image_change = now;
 
                 match save_image_as_png(&image_data, &image_dir, hash) {
                     Ok(path) => {
-                        let msg = format!("🖼️ Bild gespeichert unter {}", path.display());
-                        println!("{}", msg);
+                        println!("🖼️ Bild gespeichert unter {}", path.display());
 
                         let mut hist =
                             History::load(&config.storage_path, history.lock().unwrap().limit);
-                        hist.add_image(path.clone());
+                        hist.add_image(path.clone(), hash);
                         if let Err(err) = hist.save(&config.storage_path) {
                             eprintln!("⚠️ Fehler beim Speichern (Bild): {}", err);
                         }
 
-                        // shared_history ersetzen
                         *history.lock().unwrap() = hist;
+
+                        // ✅ Setze skip hash bevor wir Clipboard setzen
+                        crate::clipboard_state::set_skip_image_hash(hash);
+
+                        // ✅ Set ignore flag
+                        crate::clipboard_state::set_ignore_flag();
+
+                        // ✅ Clipboard erneut setzen
+                        let item = crate::history::ClipboardItem::Image(path.clone());
+                        if let Err(e) = crate::clipboard::set_clipboard_item(&item) {
+                            eprintln!("⚠️ Fehler beim Setzen des Bildes ins Clipboard: {}", e);
+                        }
                     }
                     Err(e) => eprintln!("⚠️ Fehler beim Speichern des Bildes: {}", e),
                 }
@@ -145,12 +179,6 @@ fn get_clipboard_image() -> Option<Vec<u8>> {
             None
         }
     }
-}
-
-fn hash_data<T: Hash>(data: &T) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    data.hash(&mut hasher);
-    hasher.finish()
 }
 
 fn save_image_as_png(

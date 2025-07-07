@@ -1,3 +1,4 @@
+use crate::util::hash_data;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
 use std::io::{BufReader, Write};
@@ -14,6 +15,7 @@ pub struct Entry {
     pub content: String, // Vorschau (z. B. "🖼 Bild gespeichert...")
     pub timestamp: u64,
     pub item: ClipboardItem, // NEU: Für das tatsächliche Clipboard-Setzen
+    pub hash: Option<u64>,   // ✅ NEU: für persistente Duplicate-Erkennung
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -35,19 +37,26 @@ impl History {
             return;
         }
 
+        let hash = hash_data(&text);
         let entry = Entry {
             content: text.clone(),
             timestamp: chrono::Utc::now().timestamp() as u64,
             item: ClipboardItem::Text(text),
+            hash: Some(hash),
         };
         self.entries.insert(0, entry);
         self.cleanup();
     }
 
-    pub fn add_image(&mut self, image_path: PathBuf) {
+    pub fn add_image(&mut self, image_path: PathBuf, image_hash: u64) {
         let content = format!("{}", image_path.display());
 
-        if self.entries.first().map(|e| &e.content) == Some(&content) {
+        // ✅ Prüfe, ob bereits ein Bild mit diesem Hash existiert
+        if self.entries.iter().any(|e| e.hash == Some(image_hash)) {
+            println!(
+                "⚠️ Bild mit Hash {:x} bereits in History – skip.",
+                image_hash
+            );
             return;
         }
 
@@ -55,6 +64,7 @@ impl History {
             content,
             timestamp: chrono::Utc::now().timestamp() as u64,
             item: ClipboardItem::Image(image_path),
+            hash: Some(image_hash),
         };
         self.entries.insert(0, entry);
         self.cleanup();
