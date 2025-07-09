@@ -1,3 +1,4 @@
+use crate::error::AnyResult;
 use crate::util::hash_data;
 use crate::{
     clipboard_state,
@@ -217,11 +218,7 @@ fn clipboard_is_empty() -> bool {
     get_clipboard_text().is_none() && get_clipboard_image().is_none()
 }
 
-fn save_image_as_png(
-    data: &[u8],
-    dir: &PathBuf,
-    hash: u64,
-) -> Result<PathBuf, Box<dyn std::error::Error>> {
+fn save_image_as_png(data: &[u8], dir: &PathBuf, hash: u64) -> AnyResult<PathBuf> {
     let img = image::load_from_memory(data)?.to_rgba8();
     let buffer: ImageBuffer<Rgba<u8>, _> =
         ImageBuffer::from_raw(img.width(), img.height(), img.into_raw())

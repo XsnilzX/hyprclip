@@ -2,12 +2,14 @@ mod clear;
 mod clipboard;
 mod clipboard_state;
 mod config;
+mod error;
 mod history;
 mod ui;
 mod util;
 mod watcher;
 mod waybar;
 
+use crate::error::AnyResult;
 use clap::Parser;
 use config::Config;
 use history::History;
@@ -48,7 +50,7 @@ struct Cli {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> AnyResult<()> {
     let cli = Cli::parse();
     let cfg = Config::load_or_create();
 
@@ -104,10 +106,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 // 🔐 Watcher-Modus mit Lockfile + Ctrl+C-Abbruch
-async fn run_watcher(
-    history: Arc<Mutex<History>>,
-    cfg: Config,
-) -> Result<(), Box<dyn std::error::Error>> {
+async fn run_watcher(history: Arc<Mutex<History>>, cfg: Config) -> AnyResult<()> {
     use tokio::signal;
 
     let lock_path = "/tmp/hyprclip.lock";
