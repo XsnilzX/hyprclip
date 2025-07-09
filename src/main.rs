@@ -1,3 +1,4 @@
+mod clear;
 mod clipboard;
 mod clipboard_state;
 mod config;
@@ -58,9 +59,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 🔄 Aktionen mit sofortigem Rückgabewert
     if cli.clear {
-        history.lock().unwrap().clear();
-        history.lock().unwrap().save(&cfg.storage_path)?;
-        println!("✅ Verlauf gelöscht.");
+        clear::clear_history(&mut history.lock().unwrap(), &cfg)?;
         return Ok(());
     }
 

@@ -1,5 +1,9 @@
 use crate::util::hash_data;
-use crate::{clipboard_state, config::Config, history::History};
+use crate::{
+    clipboard_state,
+    config::Config,
+    history::{ClipboardItem, History},
+};
 use chrono::Local;
 use image::{ImageBuffer, Rgba};
 use std::{
@@ -20,6 +24,7 @@ pub async fn watch_clipboard(history: Arc<Mutex<History>>, config: Config) {
     let mut last_text_change = Instant::now();
     let mut last_image_change = Instant::now();
     let debounce_delay = Duration::from_millis(500);
+    let mut last_item: Option<ClipboardItem> = None;
 
     let image_dir = PathBuf::from(&config.image_storage_path);
     fs::create_dir_all(&image_dir).expect("📁 Bildverzeichnis konnte nicht erstellt werden.");
@@ -29,6 +34,18 @@ pub async fn watch_clipboard(history: Arc<Mutex<History>>, config: Config) {
         if clipboard_state::should_ignore_recently(Duration::from_millis(500)) {
             // Änderung stammt von uns selbst → ignorieren
             println!("⚠️ Ignoriere Clipboard-Event wegen kürzlichem self-set.");
+            sleep(Duration::from_millis(200)).await;
+            continue;
+        }
+
+        if last_item.is_some() && clipboard_is_empty() {
+            if let Some(item) = &last_item {
+                if let Err(e) = crate::clipboard::set_clipboard_item(item) {
+                    eprintln!("⚠️ Fehler beim erneuten Setzen des Clipboards: {}", e);
+                } else {
+                    println!("🔄 Clipboard wiederhergestellt.");
+                }
+            }
             sleep(Duration::from_millis(200)).await;
             continue;
         }
@@ -59,9 +76,11 @@ pub async fn watch_clipboard(history: Arc<Mutex<History>>, config: Config) {
 
                 *hist_guard = hist;
 
-                let item = crate::history::ClipboardItem::Text(text.clone());
+                let item = ClipboardItem::Text(text.clone());
                 if let Err(e) = crate::clipboard::set_clipboard_item(&item) {
                     eprintln!("⚠️ Fehler beim Setzen des Textes ins Clipboard: {}", e);
+                } else {
+                    last_item = Some(item);
                 }
             }
         }
@@ -118,9 +137,11 @@ pub async fn watch_clipboard(history: Arc<Mutex<History>>, config: Config) {
                         crate::clipboard_state::set_ignore_flag();
 
                         // ✅ Clipboard erneut setzen
-                        let item = crate::history::ClipboardItem::Image(path.clone());
+                        let item = ClipboardItem::Image(path.clone());
                         if let Err(e) = crate::clipboard::set_clipboard_item(&item) {
                             eprintln!("⚠️ Fehler beim Setzen des Bildes ins Clipboard: {}", e);
+                        } else {
+                            last_item = Some(item);
                         }
                     }
                     Err(e) => eprintln!("⚠️ Fehler beim Speichern des Bildes: {}", e),
@@ -190,6 +211,10 @@ fn get_clipboard_image() -> Option<Vec<u8>> {
             None
         }
     }
+}
+
+fn clipboard_is_empty() -> bool {
+    get_clipboard_text().is_none() && get_clipboard_image().is_none()
 }
 
 fn save_image_as_png(
