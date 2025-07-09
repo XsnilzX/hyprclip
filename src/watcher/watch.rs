@@ -52,12 +52,17 @@ pub async fn watch_clipboard(history: Arc<Mutex<History>>, config: Config) {
                 last_text_change = now;
 
                 let mut hist = History::load(&config.storage_path, limit);
-                hist.add_text(text);
+                hist.add_text(text.clone());
                 if let Err(err) = hist.save(&config.storage_path) {
                     eprintln!("⚠️ Fehler beim Speichern (Text): {}", err);
                 }
 
                 *hist_guard = hist;
+
+                let item = crate::history::ClipboardItem::Text(text.clone());
+                if let Err(e) = crate::clipboard::set_clipboard_item(&item) {
+                    eprintln!("⚠️ Fehler beim Setzen des Textes ins Clipboard: {}", e);
+                }
             }
         }
 

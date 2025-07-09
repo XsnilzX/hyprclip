@@ -115,7 +115,7 @@ impl HyprclipApp {
             }
         }
 
-        let _ = crate::clipboard::set_clipboard_item(&entry.item);
+        let _ = crate::clipboard::set_clipboard_item_no_ignore(&entry.item);
 
         self.selected_index = 0;
 
