@@ -106,21 +106,15 @@ impl HyprclipApp {
         // Setze an den Anfang
         history.entries.insert(0, entry.clone());
 
-        // Bei Bildauswahl Hash ermitteln und Skip-Hash setzen, damit der Watcher
-        // das Clipboard-Event nicht erneut speichert
+        // Bild-Einträge: Hash ggf. nachtragen, Clip setzen ohne erneute Erkennung
         if let crate::history::ClipboardItem::Image(ref path) = entry.item {
-            if let Ok(data) = std::fs::read(path) {
-                let hash = crate::util::hash_data(&data);
-                crate::clipboard_state::set_skip_image_hash(hash);
-
-                if history.entries[0].hash.is_none() {
-                    history.entries[0].hash = Some(hash);
+            if history.entries[0].hash.is_none() {
+                if let Ok(data) = std::fs::read(path) {
+                    history.entries[0].hash = Some(crate::util::hash_data(&data));
                 }
             }
         }
 
-        // ✅ Set ignore flag bevor Clipboard gesetzt wird
-        crate::clipboard_state::set_ignore_flag();
         let _ = crate::clipboard::set_clipboard_item(&entry.item);
 
         self.selected_index = 0;
