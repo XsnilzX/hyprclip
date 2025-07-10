@@ -15,7 +15,7 @@ Er bietet eine moderne GUI mit [egui](https://github.com/emilk/egui) und nahtlos
 ```bash
 git clone https://github.com/XsnilzX/hyprclip.git
 cd hyprclip
-sudo make install
+make install
 ```
 
 ## 📦 Abhängigkeiten
