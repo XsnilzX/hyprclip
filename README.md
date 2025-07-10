@@ -19,25 +19,32 @@ make install
 ```
 
 ## 📦 Abhängigkeiten
+
 - Linux mit Wayland (z.B. Hyprland)
 - wl-clipboard - für Clipboard zugriff
 - Waybar - für Integration in Waybar
 
 ## 🚀 Starten
+
 ```bash
 ./target/release/hyprclip
 ```
 
 Wenn du Hyprclip in Waybar integrieren willst, kannst du das JSON-Modul wie folgt einbinden:
+
 ```JSON
 "custom/hyprclip": {
   "format": "{}",
   "exec": "/usr/bin/hyprclip --waybar",
-  "interval": 1
+  "on-click": "/usr/bin/hyprclip --gui",
+  "tooltip": true,
+  "return-type": "json",
+  "interval": 5
 }
 ```
 
 ## 📜 Lizenz
+
 Dieses Projekt steht unter der [MIT-Lizenz](LICENSE).
 Der Großteil des Codes wurde mit Hilfe von [ChatGPT](https://chatgpt.com/) generiert und anschließend angepasst.
 
