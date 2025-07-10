@@ -20,3 +20,6 @@ check:
 
 clean:
 	cargo clean
+
+test:
+	cargo test

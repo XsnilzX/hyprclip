@@ -1,4 +1,4 @@
-use crate::history::History;
+use crate::{error::AnyResult, history::History};
 use eframe::{egui, icon_data::from_png_bytes, NativeOptions};
 use include_bytes_plus::include_bytes;
 use std::{
@@ -9,10 +9,7 @@ use std::{
 mod app;
 use app::HyprclipApp;
 
-pub fn launch_with_history(
-    history: Arc<Mutex<History>>,
-    storage_path: PathBuf,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub fn launch_with_history(history: Arc<Mutex<History>>, storage_path: PathBuf) -> AnyResult<()> {
     // Icon laden (als Byte-Array – kein image crate nötig!)
     let icon_bytes = include_bytes!("assets/icon.png");
     let icon = from_png_bytes(&icon_bytes)?;

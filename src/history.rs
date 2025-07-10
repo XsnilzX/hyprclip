@@ -129,3 +129,58 @@ impl History {
             .collect()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn add_text_respects_limit_and_no_duplicates() {
+        let mut hist = History::new(2);
+        hist.add_text("first".into());
+        hist.add_text("second".into());
+        hist.add_text("second".into());
+        hist.add_text("third".into());
+
+        // limit should be enforced
+        assert_eq!(hist.entries.len(), 2);
+        // newest at index 0
+        assert_eq!(hist.entries[0].content, "third");
+        // duplicate text should not be inserted again
+        assert_eq!(hist.entries[1].content, "second");
+    }
+
+    #[test]
+    fn add_image_skips_duplicate_hash() {
+        let tmp = PathBuf::from("/tmp/test_image.png");
+        let mut hist = History::new(5);
+        hist.add_image(tmp.clone(), 42);
+        hist.add_image(tmp.clone(), 42);
+        assert_eq!(hist.entries.len(), 1);
+        assert_eq!(hist.entries[0].hash, Some(42));
+    }
+
+    #[test]
+    fn delete_entry_and_search() {
+        let mut hist = History::new(5);
+        hist.add_text("hello world".into());
+        hist.add_text("foo bar".into());
+
+        assert!(hist.delete_entry(0));
+        assert!(!hist.delete_entry(5));
+        assert_eq!(hist.entries.len(), 1);
+
+        let res = hist.search("hello");
+        assert_eq!(res.len(), 1);
+        assert_eq!(res[0].content, "hello world");
+    }
+
+    #[test]
+    fn export_json_valid() {
+        let mut hist = History::new(5);
+        hist.add_text("json".into());
+        let json = hist.export_json().unwrap();
+        assert!(json.contains("json"));
+    }
+}

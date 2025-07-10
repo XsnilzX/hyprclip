@@ -31,3 +31,25 @@ pub fn take_skip_image_hash() -> Option<u64> {
     let lock = SKIP_IMAGE_HASH.get_or_init(|| Mutex::new(None));
     lock.lock().unwrap().take()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::thread::sleep;
+
+    #[test]
+    fn ignore_flag_respected() {
+        set_ignore_flag();
+        assert!(should_ignore_recently(Duration::from_millis(20)));
+        sleep(Duration::from_millis(25));
+        assert!(!should_ignore_recently(Duration::from_millis(20)));
+    }
+
+    #[test]
+    fn skip_image_hash_roundtrip() {
+        set_skip_image_hash(99);
+        assert_eq!(take_skip_image_hash(), Some(99));
+        // second call should return none
+        assert_eq!(take_skip_image_hash(), None);
+    }
+}
