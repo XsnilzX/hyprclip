@@ -9,7 +9,7 @@ mod util;
 mod watcher;
 mod waybar;
 
-use crate::error::AnyResult;
+use crate::{error::AnyResult, watcher::get_latest_entry};
 use clap::Parser;
 use config::Config;
 use history::History;
@@ -47,6 +47,10 @@ struct Cli {
     /// Sucht im Verlauf nach einem Schlüsselwort
     #[arg(long)]
     search: Option<String>,
+
+    /// Gibt letzten eintrag aus
+    #[arg(long)]
+    last: bool,
 }
 
 #[tokio::main]
@@ -97,6 +101,15 @@ async fn main() -> AnyResult<()> {
 
     if cli.gui {
         ui::launch_with_history(Arc::clone(&history), cfg.storage_path.clone())?;
+        return Ok(());
+    }
+
+    if cli.last {
+        let last_entry = get_latest_entry().unwrap_or_else(|e| {
+            eprintln!("Error fetching last entry: {}", e);
+            String::from("<no entry>")
+        });
+        print!("Last entry: {}", last_entry);
         return Ok(());
     }
 
