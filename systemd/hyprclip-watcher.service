@@ -1,10 +1,11 @@
 [Unit]
 Description=Hyprclip Clipboard Watcher
-After=graphical-session.target
+After=multi-user.target
 
 [Service]
+Type=simple
 ExecStart=/usr/bin/hyprclip --watch
 Restart=on-failure
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target
